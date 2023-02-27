@@ -67,6 +67,14 @@ def latest_date_df(df: pd.DataFrame) -> pd.DataFrame:
     return latest_date_df
 
 
+def filter_on_criteria(df: pd.DataFrame) -> pd.DataFrame:
+
+    filtered_df = df[(df['pc_sma10_by_close']<0) & df['pc_sma30_by_sma100']>0]
+    filtered_df = filtered_df.sort_values('pc_sma10_by_close')
+    
+    return filtered_df
+
+
 if __name__ == "__main__":
     
     URL = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
