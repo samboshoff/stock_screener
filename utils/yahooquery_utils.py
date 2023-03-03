@@ -27,6 +27,7 @@ class Screener:
 
         self.ma_df = self.df 
 
+        self.ma_df['rolling_30day_high'] = self.ma_df['high'].rolling(30).max()
         self.ma_df[f'sma{self.fast_ma}'] = self.ma_df['adjclose'].rolling(self.fast_ma).mean()
         self.ma_df[f'sma{self.mid_ma}'] = self.ma_df['adjclose'].rolling(self.mid_ma).mean()
         self.ma_df[f'sma{self.slow_ma}'] = self.ma_df['adjclose'].rolling(self.slow_ma).mean()
@@ -66,7 +67,12 @@ class Screener:
     def filter_on_criteria(self) -> pd.DataFrame:
 
         # filter where fast_ma is greater than close price and fast_ma is greater than slow_ma. both indicate a stock is trending. 
-        self.filtered_df = self.latest_day_df[(self.latest_day_df[f'pc_sma{self.fast_ma}_by_sma{self.slow_ma}']>0) & (self.latest_day_df[f'pc_sma{self.fast_ma}_by_close']<0)]
+        self.filtered_df = self.latest_day_df[
+        (self.latest_day_df[f'pc_sma{self.fast_ma}_by_sma{self.slow_ma}']>5) 
+        & (self.latest_day_df[f'pc_sma{self.fast_ma}_by_close']<-8)
+        & (self.latest_day_df[f'pc_sma{self.fast_ma}_by_close']>-13)
+        ]
+
         self.filtered_df = self.filtered_df.sort_values(f'pc_sma{self.fast_ma}_by_close')
         
         return self.filtered_df
