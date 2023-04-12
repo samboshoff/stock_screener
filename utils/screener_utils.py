@@ -26,9 +26,9 @@ class Screener:
 
         return self.df 
 
-    def calculate_MAs(self) -> pd.DataFrame:
+    def calculate_MAs(self, df) -> pd.DataFrame:
         """Calculate the moving averages and indicators"""
-        self.ma_df = self.df 
+        self.ma_df = df.copy()
 
         self.ma_df['rolling_30day_high'] = self.ma_df['high'].rolling(30).max()
         self.ma_df[f'sma{self.fast_ma}'] = self.ma_df['adjclose'].rolling(self.fast_ma).mean()
@@ -37,7 +37,7 @@ class Screener:
 
         return self.ma_df
 
-    def calculate_ma_indicators(self) -> pd.DataFrame:
+    def calculate_ma_indicators(self, ma_df) -> pd.DataFrame:
         """Calculate moving average indicators
         1: percentage difference of fast_ma and yesterdays's close price
         2: percentage difference of mid_ma and yesterdays's close price
@@ -45,8 +45,8 @@ class Screener:
         4: mean of the mid_ma from the last 5 days. 
         """
         individual_df_list = []
-
-        for symbol, new_df in self.ma_df.groupby(by='symbol'):
+        
+        for symbol, new_df in ma_df.groupby(by='symbol'):
             new_df = new_df.sort_index().tail(5)
 
             new_df[f'pc_sma{self.fast_ma}_by_close'] = new_df.apply(lambda x: _calculate_pc_ma(x[f'sma{self.fast_ma}'], x['adjclose']), axis=1)
@@ -60,7 +60,7 @@ class Screener:
 
         return self.joined_df
 
-    def latest_date_df(self) -> pd.DataFrame: 
+    def latest_date_df(self, indicators_df) -> pd.DataFrame: 
         """"Filter the dataframe to only take the most recent date of data after having calculated the indicators"""
 
         df_list = []
@@ -73,7 +73,7 @@ class Screener:
 
         return self.latest_day_df
 
-    def filter_on_criteria(self) -> pd.DataFrame:
+    def screener_filter_on_criteria(self) -> pd.DataFrame:
         """"Apply the screener based on the indicators we have made. 
         Criteria 1: fast_ma is greater than slow_ma. Have picked that it should be 5% greater arbitrarily.
         Criteria 2: fast_ma is greater than close price. Perhaps indicates that a stock is undervalued on a given day due to short term causes.
@@ -81,9 +81,9 @@ class Screener:
          Todo: iterate through using historic data to find the best threshold rather than picking arbitrarily."""
 
         self.filtered_df = self.latest_day_df[
-        (self.latest_day_df[f'pc_sma{self.fast_ma}_by_sma{self.slow_ma}']>5) 
+        (self.latest_day_df[f'pc_sma{self.fast_ma}_by_sma{self.slow_ma}']>5 
         & (self.latest_day_df[f'pc_sma{self.fast_ma}_by_close']<-0)
-        & (self.latest_day_df[f'pc_sma{self.fast_ma}_by_close']>-5)
+        & (self.latest_day_df[f'pc_sma{self.fast_ma}_by_close']>-5))
         ]
 
         self.filtered_df = self.filtered_df.sort_values(f'pc_sma{self.fast_ma}_by_close')
@@ -117,7 +117,6 @@ class Screener:
 
             self._reupload_current_stocks_df()
 
-
     def _reupload_current_stocks_df(self):
         """Take current stocks owned csv and concat to new stocks to buy. Then overwrite to 'porfolio.csv'"""
 
@@ -147,10 +146,6 @@ class Screener:
 
         self.row_count = len(self.existing_portfolio_df[self.existing_portfolio_df["currently_owned"]==True])
         print(f'row count of portfolio is {self.row_count}')
-
-        # old way without condition
-        #  with open('stocks_owned.csv') as f:
-        #     self.row_count = sum(1 for line in f)
         return self.row_count
 
 def _calculate_pc_ma(name_of_ma_row, name_of_adj_close_row):
@@ -172,13 +167,10 @@ if __name__ == "__main__":
     # df.to_csv('price_history_download.csv')
     
     Screener.df = pd.read_csv('price_history_download.csv')
-    ma_df = Screener.calculate_MAs(screener)
-    indicators_df = Screener.calculate_ma_indicators(screener)
-    latest_date_df = Screener.latest_date_df(screener)
-    filtered_df = Screener.filter_on_criteria(screener)
+    ma_df = Screener.calculate_MAs(screener, Screener.df)
+    indicators_df = Screener.calculate_ma_indicators(screener, ma_df)
+    latest_date_df = Screener.latest_date_df(screener, indicators_df)
+    filtered_df = Screener.screener_filter_on_criteria(screener)
     new_stocks = Screener.new_stocks_to_buy(screener)
 
     print('done')
-
-
-    # figure out why it's not creating the csv properly when concating. Add filter to only count rows where owned = True
