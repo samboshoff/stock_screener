@@ -8,7 +8,7 @@ class Screener:
         self.slow_ma = slow_ma
         self.stock_period = stock_period
         self.stock_url = stock_url
-        self.existing_portfolio_df = pd.read_csv('porfolio.csv')
+        self.existing_portfolio_df = pd.read_csv('portfolio.csv')
 
     def SP500_stocks_string(self) -> str:
         """"Get a list of stocks in the S&P500 using the wikipedia page. Potential to swap out the wikipedia pages for other stock markets """
@@ -26,7 +26,7 @@ class Screener:
 
         return self.df 
 
-    def calculate_MAs(self, df) -> pd.DataFrame:
+    def _calculate_MAs(self, df) -> pd.DataFrame:
         """Calculate the moving averages and indicators"""
         self.ma_df = df.copy()
 
@@ -37,7 +37,7 @@ class Screener:
 
         return self.ma_df
 
-    def calculate_ma_indicators(self, ma_df) -> pd.DataFrame:
+    def _calculate_ma_indicators(self, ma_df) -> pd.DataFrame:
         """Calculate moving average indicators
         1: percentage difference of fast_ma and yesterdays's close price
         2: percentage difference of mid_ma and yesterdays's close price
@@ -60,7 +60,7 @@ class Screener:
 
         return self.joined_df
 
-    def latest_date_df(self, indicators_df) -> pd.DataFrame: 
+    def _latest_date_df(self, indicators_df) -> pd.DataFrame: 
         """"Filter the dataframe to only take the most recent date of data after having calculated the indicators"""
 
         df_list = []
@@ -73,7 +73,7 @@ class Screener:
 
         return self.latest_day_df
 
-    def screener_filter_on_criteria(self) -> pd.DataFrame:
+    def _screener_filter_on_criteria(self) -> pd.DataFrame:
         """"Apply the screener based on the indicators we have made. 
         Criteria 1: fast_ma is greater than slow_ma. Have picked that it should be 5% greater arbitrarily.
         Criteria 2: fast_ma is greater than close price. Perhaps indicates that a stock is undervalued on a given day due to short term causes.
@@ -89,7 +89,18 @@ class Screener:
         self.filtered_df = self.filtered_df.sort_values(f'pc_sma{self.fast_ma}_by_close')
         
         return self.filtered_df
+    
+    def screener_for_new_stocks(self):
+        """Orchestrater function to:
+        1) take the price history for stock data
+        2) Calculate MAs
+        3) Calculate indicators based on MAs
+        4) Take the latest date from that data
+        5) Apply the criteria to filter down the stocks 
         
+        Takes: price_history_df
+        Returns: filtered dataframe with only stocks that have passed the criteria and should be bought """
+
     def new_stocks_to_buy(self): 
         """Identifies the stocks to buy if the currently owned stocks is less than 5. 
         If current stocks owned is less than 5: then add stocks to stocks_owned csv"""
@@ -97,7 +108,7 @@ class Screener:
         self.row_count = self._count_stocks_owned()
         if self.row_count >=5:
             print("Number of currently owned stocks is 5. No need to add new stocks")
-            pass
+            raise Exception 
 
         else:
             number_of_new_stocks_needed = 5 - self.row_count
@@ -118,14 +129,14 @@ class Screener:
             self._reupload_current_stocks_df()
 
     def _reupload_current_stocks_df(self):
-        """Take current stocks owned csv and concat to new stocks to buy. Then overwrite to 'porfolio.csv'"""
+        """Take current stocks owned csv and concat to new stocks to buy. Then overwrite to 'portfolio.csv'"""
 
         unioned_df = pd.concat([self.existing_portfolio_df, self.stocks_to_buy_df], ignore_index=True)
         unioned_df = unioned_df[['symbol', 'date_bought', 'date_sold','currently_owned']]
         
-        return unioned_df.to_csv('porfolio.csv', index=False)
+        return unioned_df.to_csv('portfolio.csv', index=False)
 
-    def _only_take_unique_stocks(self, identified_stocks_df, porfolio_df):
+    def _only_take_unique_stocks(self, identified_stocks_df, portfolio_df):
         """Take two dataframes and filter identified_stocks_df to only include stocks that aren't in portfolio_df
         Filter portfolio_df to only include currently owned stocks (currently_owned == True).
         Left outer join on 'symbol'.
@@ -133,7 +144,7 @@ class Screener:
         Todo: maybe remove this unique filter and replace by doubling down on a position if indicators point to it being a better bet. 
         """
 
-        currently_owned_portfolio_df = porfolio_df[porfolio_df["currently_owned"]==True].copy()
+        currently_owned_portfolio_df = portfolio_df[portfolio_df["currently_owned"]==True].copy()
 
         new_identified_stocks_df = pd.merge(identified_stocks_df, currently_owned_portfolio_df, on=['symbol'], how='outer', indicator=True).query('_merge=="left_only"')
         print(new_identified_stocks_df)
