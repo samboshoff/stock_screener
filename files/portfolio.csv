@@ -1,0 +1,8 @@
+symbol,date_bought,date_sold,currently_owned
+wm,2023-04-12,2023-04-13,False
+aap,2023-04-12,2023-04-13,False
+ph,2023-04-06,,True
+ctlt,2023-04-25,,True
+tsla,2023-04-25,,True
+mktx,2023-04-25,,True
+cdw,2023-04-25,,True
