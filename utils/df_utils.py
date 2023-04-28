@@ -39,12 +39,12 @@ class Moving_Average:
         indicators_df = pd.concat(individual_df_list)
         return indicators_df
 
-def _latest_date_df(indicators_df) -> pd.DataFrame: 
+def _latest_date_df(df) -> pd.DataFrame: 
     """"Filter the dataframe to only take the most recent date of data after having calculated the indicators"""
 
     df_list = []
 
-    for symbol, new_df in indicators_df.groupby(by='symbol'):
+    for symbol, new_df in df.groupby(by='symbol'):
         new_df = new_df.sort_index().tail(1)
         df_list.append(new_df)
 

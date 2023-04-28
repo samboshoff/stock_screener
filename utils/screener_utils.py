@@ -1,15 +1,16 @@
 import pandas as pd
 import yahooquery as yq
-from utils.df_utils import Moving_Average, _calculate_pc_ma, _calculate_pc_ma_difference, _latest_date_df
+from df_utils import Moving_Average, _calculate_pc_ma, _calculate_pc_ma_difference, _latest_date_df
+from general_utils import _count_stocks_owned
 
 class Screener:
-    def __init__(self, fast_ma: int, mid_ma: int, slow_ma: int, stock_period: str, stock_url:str):
+    def __init__(self, fast_ma: int, mid_ma: int, slow_ma: int, stock_period: str, portfolio_path: str):
         self.fast_ma = fast_ma
         self.mid_ma = mid_ma
         self.slow_ma = slow_ma
         self.stock_period = stock_period
-        self.stock_url = stock_url
-        self.existing_portfolio_df = pd.read_csv('files/portfolio.csv')
+        self.porfolio_path = portfolio_path
+        self.existing_portfolio_df = pd.read_csv(self.porfolio_path)
     
     def screener_for_new_stocks(self, price_history_df):
         """Orchestrater function to:
@@ -27,7 +28,6 @@ class Screener:
         indicators_df = moving_average._calculate_ma_indicators(ma_df)
         self.latest_day_df = _latest_date_df(indicators_df)
         self.screened_df = self._screener_filter_on_criteria()
-
         return self.screened_df
     
     def new_stocks_to_buy(self): 
@@ -37,10 +37,10 @@ class Screener:
         Returns: Nothing. Adds new stocks to portfolio.csv 
         """
 
-        self.row_count = self._count_stocks_owned()
+        self.row_count = _count_stocks_owned(self.porfolio_path)
         if self.row_count >=5:
-            print("Number of currently owned stocks is 5. No need to add new stocks")
-            raise Exception 
+            raise Exception("Number of currently owned stocks is 5. No need to add new stocks")
+
 
         else:
             number_of_new_stocks_needed = 5 - self.row_count
@@ -50,13 +50,14 @@ class Screener:
 
             # we only want to hold 5 stocks so take the best stocks from filtered_df and only take symbol column
             self.top_screened_stocks_df = new_screened_stocks_df.head(number_of_new_stocks_needed).copy()
-        
-            self.top_screened_stocks_df['date_bought'] = pd.Timestamp.today().strftime('%Y-%m-%d')
+            self.top_screened_stocks_df['date_bought'] = self.top_screened_stocks_df['date']
+            self.top_screened_stocks_df['buy_price'] = self.top_screened_stocks_df['adjclose']
             self.top_screened_stocks_df['date_sold'] = ''
+            self.top_screened_stocks_df['sell_price'] = ''
             self.top_screened_stocks_df['currently_owned'] = True
 
             # append top stocks to dataframe, append if csv already exists
-            self.stocks_to_buy_df = self.top_screened_stocks_df[['symbol', 'date_bought', 'date_sold','currently_owned']].copy()
+            self.stocks_to_buy_df = self.top_screened_stocks_df[['symbol', 'date_bought', 'buy_price', 'date_sold', 'sell_price', 'currently_owned']].copy()
 
             self._reupload_current_stocks_df()
 
@@ -80,8 +81,8 @@ class Screener:
         """Take current stocks owned csv and concat to new stocks to buy. Then overwrite to 'portfolio.csv'"""
 
         unioned_df = pd.concat([self.existing_portfolio_df, self.stocks_to_buy_df], ignore_index=True)
-        unioned_df = unioned_df[['symbol', 'date_bought', 'date_sold','currently_owned']]
-        return unioned_df.to_csv('files/portfolio.csv', index=False)
+        unioned_df = unioned_df[['symbol', 'date_bought', 'buy_price', 'date_sold', 'sell_price', 'currently_owned']]
+        return unioned_df.to_csv(self.porfolio_path, index=False)
 
     def _only_take_unique_stocks(self, identified_stocks_df, portfolio_df):
         """Take two dataframes and filter identified_stocks_df to only include stocks that aren't in portfolio_df
@@ -96,27 +97,13 @@ class Screener:
         new_identified_stocks_df = pd.merge(identified_stocks_df, currently_owned_portfolio_df, on=['symbol'], how='outer', indicator=True).query('_merge=="left_only"')
         return new_identified_stocks_df
 
-    def _count_stocks_owned(self):
-        """Count how many stocks in the portfolio csv are currently owned.
-        Function used to early screener early if our portfolio is full and to identify how many new stocks to buy if portfolio isn't full"""
-
-        self.row_count = len(self.existing_portfolio_df[self.existing_portfolio_df["currently_owned"]==True])
-        print(f'row count of portfolio is {self.row_count}')
-        return self.row_count
 
 if __name__ == "__main__":
-    
-    screener = Screener(25,50,100,'1y', 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
+    portfolio_path = 'files/portfolio.csv'
+    price_history_path = 'files/price_history_download.csv'
 
-    # tickers_string = Screener.SP500_stocks_string(screener)
-    # df = Screener.get_price_history(screener)
-    # df.to_csv('price_history_download.csv')
-    
-    # Screener.df = pd.read_csv('price_history_download.csv')
-    # ma_df = calculate_MAs(screener, Screener.df)
-    # indicators_df = calculate_ma_indicators(screener, ma_df)
-    # latest_date_df = latest_date_df(screener, indicators_df)
-    # filtered_df = Screener.screener_filter_on_criteria(screener)
-    # new_stocks = Screener.new_stocks_to_buy(screener)
+    screener = Screener(25,50,100,'1y', 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies', portfolio_path)
 
-    # print('done')
+    price_history_df = pd.read_csv(price_history_path)
+    screener.screener_for_new_stocks(price_history_df)
+    screener.new_stocks_to_buy()

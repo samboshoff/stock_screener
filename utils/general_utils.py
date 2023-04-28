@@ -32,3 +32,13 @@ def SP500_stocks_string(stock_url) -> str:
     tickers_string = ' '.join(tickers).lower()
 
     return tickers_string
+
+
+def _count_stocks_owned(portfolio_path):
+    """Count how many stocks in the portfolio csv are currently owned.
+    Function used to early screener early if our portfolio is full and to identify how many new stocks to buy if portfolio isn't full"""
+
+    existing_portfolio_df = pd.read_csv(portfolio_path)
+    row_count = len(existing_portfolio_df[existing_portfolio_df["currently_owned"]==True])
+    print(f'row count of portfolio is {row_count}')
+    return row_count

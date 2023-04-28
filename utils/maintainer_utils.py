@@ -4,14 +4,16 @@ from utils.df_utils import Moving_Average, _latest_date_df
 
 
 class Maintainer:
-    def __init__(self, fast_ma: int, mid_ma: int, slow_ma: int, stock_period: str):
+    def __init__(self, fast_ma: int, mid_ma: int, slow_ma: int, stock_period: str, portfolio_path: str, price_history_path: str, date):
         self.fast_ma = fast_ma
         self.mid_ma = mid_ma
         self.slow_ma = slow_ma
         self.stock_period = stock_period
-        self.price_history_df = pd.read_csv('files/price_history_download.csv')
-
-        self.existing_portfolio_df = pd.read_csv('files/portfolio.csv')
+        self.date = date
+        self.portfolio_path = portfolio_path
+        self.existing_portfolio_df = pd.read_csv(self.portfolio_path)
+        self.price_history_path = price_history_path
+        self.price_history_df = pd.read_csv(price_history_path)
         self.owned_portfolio_stocks = self.existing_portfolio_df[self.existing_portfolio_df["currently_owned"]==True].copy()
         self.list_of_owned_portfolio_stocks = self.owned_portfolio_stocks['symbol'].tolist()
 
@@ -30,10 +32,10 @@ class Maintainer:
         self.price_history_for_portfolio_df = self._price_history_for_portfolio_dataframe()
 
         # create ma's and indicators using functions in screener_utils. Todo: create different indicators for maintaining? 
-        portfolio_latest_date_with_indicators_df = Maintainer._create_MAs_and_indicators(self, self.price_history_for_portfolio_df)
+        self.portfolio_latest_date_with_indicators_df = Maintainer._create_MAs_and_indicators(self, self.price_history_for_portfolio_df)
 
         # apply criteria filters here. 
-        self.list_of_stocks_to_be_sold = self._maintainer_filter_on_criteria(portfolio_latest_date_with_indicators_df)
+        self.list_of_stocks_to_be_sold = self._maintainer_filter_on_criteria(self.portfolio_latest_date_with_indicators_df)
 
         # update the portfolio.csv
         if len(self.list_of_stocks_to_be_sold) == False:
@@ -42,7 +44,8 @@ class Maintainer:
         else: 
             print("stocks need to be sold")
             self.updated_portfolio_df = self._update_portfolio_csv()
-            self.updated_portfolio_df.to_csv('files/portfolio.csv', index=False)
+            print(self.updated_portfolio_df)
+            self.updated_portfolio_df.to_csv(self.portfolio_path, index=False)
 
     def _create_MAs_and_indicators(self, price_history_for_portfolio_df: pd.DataFrame) -> pd.DataFrame:
         """Orchestrator to create the MA and indicator columns, and return the latest date by calling
@@ -78,35 +81,53 @@ class Maintainer:
         Takes: 
         1) list of stocks to be sold 
         2) portfolio.csv
+        3) portfolio_latest_date_with_indicators_df 
         Returns: a csv of the same name with updated data in rows"""
 
         # match rows where dataframe in list into a separate dataframe
-        stocks_to_be_sold_df = self.existing_portfolio_df[self.existing_portfolio_df['symbol'].isin(self.list_of_stocks_to_be_sold)].copy()
+        self.stocks_to_be_sold_df = self.existing_portfolio_df[self.existing_portfolio_df['symbol'].isin(self.list_of_stocks_to_be_sold)].copy()
 
         # change value of currently_owned from True to False for those stocks to be sold
-        stocks_to_be_sold_df['currently_owned'] = False
+        self.stocks_to_be_sold_df['currently_owned'] = False
 
         # add date sold
-        stocks_to_be_sold_df['date_sold'] = pd.Timestamp.today().strftime('%Y-%m-%d')
+        if self.portfolio_path == 'files/portfolio.csv':
+            self.stocks_to_be_sold_df['date_sold'] = pd.Timestamp.today().strftime('%Y-%m-%d')
+        
+        # conditional case for the backtester
+        else:
+            self.stocks_to_be_sold_df['date_sold'] = self.date
+
+        # add sell_price
+        self.stocks_to_be_sold_df = self._add_sell_price()
 
         # create copy of portfolio with stocks to keep 
         stocks_to_keep_df = self.existing_portfolio_df[~self.existing_portfolio_df['symbol'].isin(self.list_of_stocks_to_be_sold)].copy()
 
         # concat stocks to keep with stocks to sell
-        self.updated_portfolio_df = pd.concat([stocks_to_be_sold_df, stocks_to_keep_df], ignore_index=True)
+        self.updated_portfolio_df = pd.concat([self.stocks_to_be_sold_df, stocks_to_keep_df], ignore_index=True)
     
         return self.updated_portfolio_df
+
+    def _add_sell_price(self):
+        """
+        Take: list of stocks to be sold, portfolio_latest_date_with_indicators_df. 
+        then pull out the adjclose for those stocks. concat that back to stocks_to_be_sold_df. 
+        """
+        portfolio_with_sell_price_df = self.portfolio_latest_date_with_indicators_df[self.portfolio_latest_date_with_indicators_df['symbol'].isin(self.list_of_stocks_to_be_sold)].copy()
+        portfolio_with_sell_price_df = portfolio_with_sell_price_df[['symbol', 'adjclose']]
+
+        # join sell price to stocks to be sold df
+        stocks_to_be_sold_with_sell_price_df = self.stocks_to_be_sold_df.merge(portfolio_with_sell_price_df, on='symbol')
+        stocks_to_be_sold_with_sell_price_df['sell_price'] = stocks_to_be_sold_with_sell_price_df['adjclose'] 
+        stocks_to_be_sold_with_sell_price_df = stocks_to_be_sold_with_sell_price_df.drop('adjclose', axis=1)
+
+        return stocks_to_be_sold_with_sell_price_df
 
 if __name__ == "__main__":
     maintainer = Maintainer(25,50,100,'1y')
 
-    # indicators_df = Maintainer._create_MAs_and_indicators(maintainer, maintainer.price_history_df)
-    # stocks_to_be_filtered = Maintainer._maintainer_filter_on_criteria(maintainer, indicators_df)
-    # print(stocks_to_be_filtered)
-    # print(len(stocks_to_be_filtered))
-
-    list_of_stocks_to_be_sold = Maintainer.check_status_of_portfolio(maintainer)
-    Maintainer._update_portfolio_csv(maintainer)
+    Maintainer.maintain_portfolio(maintainer)
 
     # filtered_df = Maintainer._price_history_for_portfolio_dataframe(maintainer)
     # portfolio_ma_df = Maintainer.check_status_of_portfolio(maintainer)
